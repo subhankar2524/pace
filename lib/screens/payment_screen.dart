@@ -18,7 +18,7 @@ class PaymentScreen extends ConsumerStatefulWidget {
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   late final TextEditingController _amountController;
-  ApplicationMeta? _selectedApp;
+  _SelectedUpiApp? _selectedApp;
   bool _submitting = false;
 
   @override
@@ -61,6 +61,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   prefixText: '₹ ',
                   border: OutlineInputBorder(),
                 ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) {
+                  if (!_submitting) {
+                    _handlePay();
+                  }
+                },
               ),
               const SizedBox(height: 16),
               const Text(
@@ -71,20 +77,24 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               Expanded(
                 child: appsAsync.when(
                   data: (apps) {
-                    if (apps.isEmpty) {
+                    final options = _buildOptions(apps);
+                    if (options.isEmpty) {
                       return const Center(
-                        child: Text('No UPI apps found on this device.'),
+                        child: Text('No UPI apps available on this device.'),
                       );
                     }
-                    _selectedApp ??= apps.first;
+                    _selectedApp ??= options.first;
                     return ListView.builder(
-                      itemCount: apps.length,
+                      itemCount: options.length,
                       itemBuilder: (context, index) {
-                        final app = apps[index];
-                        return RadioListTile<ApplicationMeta>(
-                          value: app,
+                        final option = options[index];
+                        return RadioListTile<_SelectedUpiApp>(
+                          value: option,
                           groupValue: _selectedApp,
-                          title: Text(app.upiApplication.getAppName()),
+                          title: Text(option.label),
+                          subtitle: option.isFallback
+                              ? const Text('Try to open this app')
+                              : null,
                           onChanged: (value) {
                             setState(() {
                               _selectedApp = value;
@@ -134,11 +144,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     final service = ref.read(upiServiceProvider);
     try {
-      final response = await service.pay(
-        payload: widget.payload,
-        amount: amount,
-        app: app,
-      );
+      final response = await (app.isFallback
+          ? service.payWithApp(
+              payload: widget.payload,
+              amount: amount,
+              app: app.app!,
+            )
+          : service.pay(
+              payload: widget.payload,
+              amount: amount,
+              app: app.meta!,
+            ));
 
       final status = response.status?.name ?? 'unknown';
       final transaction = LocalTransaction(
@@ -148,7 +164,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         amount: amount,
         status: status,
         createdAt: DateTime.now(),
-        upiApp: app.upiApplication.getAppName(),
+        upiApp: app.label,
         responseCode: _safeResponseCode(response),
         txnId: _safeTxnId(response),
         rawResponse: _safeRawResponse(response),
@@ -177,6 +193,38 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       }
     }
   }
+}
+
+class _SelectedUpiApp {
+  _SelectedUpiApp.meta(this.meta)
+      : app = null,
+        isFallback = false,
+        label = meta!.upiApplication.getAppName();
+
+  _SelectedUpiApp.fallback(this.app)
+      : meta = null,
+        isFallback = true,
+        label = app!.getAppName();
+
+  final ApplicationMeta? meta;
+  final UpiApplication? app;
+  final bool isFallback;
+  final String label;
+}
+
+List<_SelectedUpiApp> _buildOptions(List<ApplicationMeta> installed) {
+  if (installed.isNotEmpty) {
+    return installed.map(_SelectedUpiApp.meta).toList();
+  }
+  final fallbackApps = [
+    UpiApplication.googlePay,
+    UpiApplication.phonePe,
+    UpiApplication.paytm,
+    UpiApplication.bhim,
+    UpiApplication.amazonPay,
+    UpiApplication.whatsApp,
+  ];
+  return fallbackApps.map(_SelectedUpiApp.fallback).toList();
 }
 
 String? _safeResponseCode(UpiTransactionResponse response) {

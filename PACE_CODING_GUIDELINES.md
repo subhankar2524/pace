@@ -14,6 +14,9 @@
   - Added shared formatters utility for date/time display.
   - Added Hive-backed TransactionStore abstraction and in-memory test override.
   - Updated widget test harness for PaceApp.
+  - Relaxed UPI QR parsing to support host-based pay URIs and raw VPA input.
+  - Added UPI payload parsing tests.
+  - Added fallback UPI app selection list when discovery returns empty.
 
 ## Next Focus
 - Add permissions + platform configuration for scanner and UPI intents.

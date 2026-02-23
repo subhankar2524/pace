@@ -20,24 +20,37 @@ class UpiPayload {
   final String? amount;
 
   static UpiPayload? tryParse(String data) {
-    final uri = Uri.tryParse(data.trim());
+    final raw = data.trim();
+    if (raw.isEmpty) {
+      return null;
+    }
+    if (_looksLikeVpa(raw)) {
+      return UpiPayload(raw: raw, payeeVpa: raw);
+    }
+    final uri = _extractUpiUri(raw);
     if (uri == null) {
       return null;
     }
     if (uri.scheme.toLowerCase() != 'upi') {
       return null;
     }
+    final host = uri.host.toLowerCase();
     final path = uri.path.toLowerCase();
-    if (path != 'pay') {
+    final isPayIntent = host == 'pay' || path == 'pay' || path == '/pay';
+    if (!isPayIntent) {
       return null;
     }
     final params = uri.queryParameters;
     final payeeVpa = params['pa'];
     if (payeeVpa == null || payeeVpa.isEmpty) {
+      // Some QR codes only encode VPA directly.
+      if (_looksLikeVpa(raw)) {
+        return UpiPayload(raw: raw, payeeVpa: raw);
+      }
       return null;
     }
     return UpiPayload(
-      raw: data,
+      raw: raw,
       payeeVpa: payeeVpa,
       payeeName: params['pn'],
       merchantCode: params['mc'],
@@ -46,5 +59,25 @@ class UpiPayload {
       currency: params['cu'],
       amount: params['am'],
     );
+  }
+
+  static Uri? _extractUpiUri(String raw) {
+    final direct = Uri.tryParse(raw);
+    if (direct != null && direct.scheme.toLowerCase() == 'upi') {
+      return direct;
+    }
+    final index = raw.toLowerCase().indexOf('upi://');
+    if (index == -1) {
+      return null;
+    }
+    final candidate = raw.substring(index).split(RegExp(r'\s')).first;
+    return Uri.tryParse(candidate);
+  }
+
+  static bool _looksLikeVpa(String value) {
+    if (value.contains('://') || value.contains('?')) {
+      return false;
+    }
+    return value.contains('@') && value.split('@').length == 2;
   }
 }

@@ -26,4 +26,21 @@ class UpiService {
       transactionNote: payload.transactionNote,
     );
   }
+
+  Future<UpiTransactionResponse> payWithApp({
+    required UpiPayload payload,
+    required double amount,
+    required UpiApplication app,
+  }) async {
+    final transactionRef = payload.transactionRef ?? const Uuid().v4();
+    return UpiPay.initiateTransaction(
+      app: app,
+      receiverUpiAddress: payload.payeeVpa,
+      receiverName: payload.payeeName ?? 'Payee',
+      transactionRef: transactionRef,
+      amount: amount.toStringAsFixed(2),
+      merchantCode: payload.merchantCode,
+      transactionNote: payload.transactionNote,
+    );
+  }
 }
